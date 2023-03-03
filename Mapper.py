@@ -5,19 +5,54 @@ import json
 import argparse
 
 ALLOW_MISMATCHED_HANDLERS = False
+MAX_VALUE = 32000
+MIN_VALUE = 32000
+
+
+
+# -----------------------------------------------------------------------------
+# Events
+# -----------------------------------------------------------------------------
 
 """
-Execute the function func with the arguments from args
+Return True iff the state
+matches the combination
+"""
+
+def named_print(Value):
+    print(Value)
+
+
+# -----------------------------------------------------------------------------
+# Triggers
+# -----------------------------------------------------------------------------
+
+
+def in_state(State, Combo):
+    for x in Combo:
+        if State[x] != 1:
+            return False
+    return True
+
+
+
+# -----------------------------------------------------------------------------
+# Utilities
+# -----------------------------------------------------------------------------
+
+
+"""
+Execute the function func with the keyword args (kwards)
+From the dictionary
 """
 
 
-def function_wrapper(func, args):
-    print("the arg array is")
-    print(args)
-    if args:
-        func(*args)
+def function_wrapper(func, kwargs):
+    if kwargs:
+        return func(**kwargs)
     else:
-        func()
+        print("This function wrapper makes no sense")
+        print("Quiting ... ")
 
 
 """
@@ -41,9 +76,14 @@ Execute a shell command
 
 def execute(command):
     argArray = command.split(" ")
-    print("arg array to execute")
-    print(argArray)
     subprocess.Popen(argArray)
+
+
+
+# -----------------------------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------------------------
+
 
 
 """
@@ -54,15 +94,69 @@ that handler
 """
 
 
-def process_digital_state(digital, handlers):
-    print(f'{digital} -> State')
+def process_digital_binds(digital, binds):
     try:
-        for handle in handlers:
-            if handle['ButtonCombo'] == digital:
-                print(f'Executing cmd {handle["Handle"]}')
-                function_wrapper(handle['Handle'], handle['Args'])
+        for bind in binds:
+            process_bind(digital, bind)
     except Exception as e:
-        print("Error Processing Handlers " + str(e))
+        print("Error Processing Digital Binds " + str(e))
+
+"""
+"Name": "Debug0",
+"Trigger": {
+    "Function": lambda State, Key: (State[Key] == 1), # A boolean function that evalutates if state triggers bind,
+                                                               # When triggers are evaluated state is injected into the kwargs
+    "Parameters": {"Key": 0}
+},
+"Handle": {
+    "Function": lambda Debug: print(f'Debug Handle {Debug} triggered'), # A function that execute in response to Trigger activation
+                                                                        # These function must defined kwargs that map to Parameters
+    "Parameters": { "Debug": 0}
+}
+"""
+
+
+def process_bind(state, bind):
+
+    # print(f' Evaluating Bind {bind["Name"]}')
+
+    kwargs = (bind["Trigger"])["Parameters"]
+    kwargs["State"] = state
+    fire = function_wrapper((bind["Trigger"])["Function"], kwargs)
+
+    # print(f' The Bind Trigger is {fire}')
+
+    if (fire):
+        print(f' The bind named {bind["Name"]} has triggered')
+
+        kwargs = (bind["Event"])["Parameters"]
+        function_wrapper((bind["Event"])["Function"], kwargs)
+
+"""
+Given a list of axes and a rule
+transform the state of the axes into 
+a finite digital state. This can transform multiple axes into 
+one state arrray. Or just 1 axis to one state array.
+"""
+
+
+def transform_axes_to_digital_state(axes, rule):
+    if rule == "trigger":
+        # anticipate axes to be an array with one value
+        u = axes[0]
+        if (u > 0 ):
+            return [0, 1]
+        else:
+            return [1, 0]
+        pass
+    elif rule == "joystick":
+        # anticipate axes to be an array with two values
+        # zones = 4
+        # deadzone_percentage = .30
+        pass
+    else:
+        print("Unknown transformation quiting ..")
+        exit(10)
 
 
 """
@@ -71,12 +165,12 @@ Run xdotool to simulate that key combination press
 """
 
 
-def press_keys(keys):
+def press_keys(Keystroke):
     try:
-        command = f'xdotool key {keys}'
+        command = f'xdotool key {Keystroke}'
         execute(command)
     except Exception as e:
-        print(f'There was an error running xdotool key {keys}')
+        print(f'There was an error running xdotool key {Keystroke}')
         print(f'Exception {e}')
 
 
@@ -90,7 +184,6 @@ def press_keys(keys):
 def short_state_to_long_state(short, size):
     state = []
     for i in range(size):
-        print(i)
         x = 0
         if i in short:
             x = 1
@@ -98,32 +191,74 @@ def short_state_to_long_state(short, size):
     return state
 
 
+# -----------------------------------------------------------------------------
+# Parsing
+# -----------------------------------------------------------------------------
 
+
+def parse_bind(bind):
+    # Name
+    model = {"Name": bind["Name"]}
+
+    # Trigger
+    trigger = bind["Trigger"]
+    trigger_model = {}
+    if (trigger["Type"] == "in_state"):
+        trigger_model["Function"] = in_state
+        trigger_model["Parameters"] = trigger["Parameters"]
+    else:
+        pass
+
+    # Event
+    event = bind["Event"]
+    event_model = {}
+    if (event["Type"] == "print"):
+        event_model["Function"] = named_print
+        event_model["Parameters"] = event["Parameters"]
+        pass
+    elif (event["Type"] == "xkeys"):
+        event_model["Function"] = press_keys
+        event_model["Parameters"] = event["Parameters"]
+
+    model["Trigger"] = trigger_model
+    model["Event"] = event_model
+    return model
+
+"""
+    Return a list of digital binds
+    Return a list of lists virtual binds
+"""
 def parse_config(json_string):
     try:
         config = json.loads(json_string)
-        if config["Type"] == "xkeys":
-            return parse_xkeys_config(config)
-        else:
-            print(f"Unknown configuration type {config['Type']}")
+
+        # Process Digital
+        d = config["Digital"]
+        digital_binds = parse_digital(d)
+
+
+        # Process Analog
+        # a = config["Analog"]
+        # parse_analog(a)
+        analog_binds = []
+
+        return (digital_binds, analog_binds)
+
     except Exception as e:
-        print(f"Error parsing {config['Type']} configuration")
+        print("Error Parsing Config")
         print(f"Error {e}")
         exit(5)
-    
 
-# Return a list of handlers
-def parse_xkeys_config(config):
-    handlers = []
-    for bind in config["DigitalBinds"]:
-        state = short_state_to_long_state(bind["ButtonCombo"], config["DigitalKeys"])
-        keystroke = bind["Keystroke"]
-        handlers.append({
-                "ButtonCombo": state,
-                "Handle": press_keys,
-                "Args": [keystroke]
-        })
-    return handlers
+
+def parse_digital(d):
+    digital_binds = []
+    for bind in d["Binds"]:
+        digital_binds.append(parse_bind(bind))
+    return digital_binds
+
+
+def parse_analog(a):
+    pass
 
 
 
@@ -141,7 +276,7 @@ args = parser.parse_args()
 print(args)
 if (args.allow_mismatch is True):
     ALLOW_MISMATCHED_HANDLERS = True
-    print("Mismatched Handlers Enabled")
+    print("Mismatched Binds Enabled")
 if (args.config is None and args.config_file is None):
     print("You must supply a config or config file")
     exit(3)
@@ -156,12 +291,12 @@ if (args.config_file is not None):
 else:
     config_string = args.config
 
-print(config_string)
-
 # TODO Verify Device is valid
 device_path = args.device
-handlers = parse_config(config_string)
-print(handlers)
+digital_binds = []
+
+(digital_binds, analog_binds) = parse_config(config_string)
+print(digital_binds)
 
 
 # -----------------------------------------------------------------------------
@@ -169,10 +304,24 @@ print(handlers)
 # -----------------------------------------------------------------------------
 
 
-handlers.append({
-        "ButtonCombo": short_state_to_long_state([0], 11),
-        "Handle": lambda n: print(f'Debug Handle {n} triggered'),
-        "Args": [1]
+#digital_binds.append({
+#        "ButtonCombo": short_state_to_long_state([0], 11),
+#        "Handle": lambda n: print(f'Debug Handle {n} triggered'),
+#        "Args": [1]
+#})
+
+digital_binds.append({
+        "Name": "Debug0",
+        "Trigger": {
+            "Function": lambda State, Key: (State[Key] == 1), # A boolean function that evalutates if state triggers bind,
+                                                                       # When triggers are evaluated state is injected into the kwargs
+            "Parameters": {"Key": 0}
+        },
+        "Event": {
+            "Function": lambda Debug: print(f'Debug Handle {Debug} triggered'), # A function that execute in response to Trigger activation
+                                                                                # These function must defined kwargs that map to Parameters
+            "Parameters": { "Debug": 0}
+        }
 })
 
 
@@ -226,7 +375,7 @@ TestLines = len(Buttons)+len(Axes)
 # -----------------------------------------------------------------------------
 
 digital = [0 for x in range(len(Buttons))]
-analag = [0 for x in range(len(Axes))]
+analog = [0 for x in range(len(Axes))]
 running = True
 
 # -----------------------------------------------------------------------------
@@ -241,19 +390,19 @@ for x in range(TestLines):
 # Validate Handler
 # -----------------------------------------------------------------------------
 
-for handle in handlers:
-    if (len(handle["ButtonCombo"]) != len(digital)):
-        warnings.warn("Button Handle is different dimension then Button State")
-        if (not ALLOW_MISMATCHED_HANDLERS):
-            print("Registered Button Combo\n" + str(handle['ButtonCombo']))
-            print("But ButtonState is\n" + str(digital))
-            exit(2)
+
+# for handle in handlers:
+#    if (len(handle["ButtonCombo"]) != len(digital)):
+#        warnings.warn("Button Handle is different dimension then Button State")
+#        if (not ALLOW_MISMATCHED_HANDLERS):
+#            print("Registered Button Combo\n" + str(handle['ButtonCombo']))
+#            print("But ButtonState is\n" + str(digital))
+#            exit(2)
 
 
 # -----------------------------------------------------------------------------
 # Process Normal Execution
 # -----------------------------------------------------------------------------
-
 
 while running:
     rawline = process.stdout.readline()
@@ -271,19 +420,33 @@ while running:
         break
     line = rawline.rstrip().decode('utf-8')
     try:
-        [EventString, TimeString, NumberString, ValueString] = line.split(',')
+
+        Strings = [EventString, TimeString, NumberString, ValueString] = line.split(',')
+
         Type = EventString[-1]
+        Time = TimeString.strip().split(' ')[1]
+        Number = NumberString.strip().split(' ')[1]
+        Value = ValueString.strip().split(' ')[1]
+
         if (Type == "1"):  # Digital Press
 
             Time = TimeString.strip().split(' ')[1]
             Number = NumberString.strip().split(' ')[1]
             Value = ValueString.strip().split(' ')[1]
-
             digital[int(Number)] = int(Value)
-            process_digital_state(digital, handlers)
+
+
+            process_digital_binds(digital, digital_binds)
         elif (Type == "2"):  # Analog Press
-            print("An Analog press has transpired")
-        print(digital)
+
+            analog[int(Number)] = int(Value)
+
+
+        # print(f'digital {digital}')
+        # print(f'analog  {analog}')
+        # left_trigger = transform_axes_to_digital_state([analog[2]], "trigger")
+        # right_trigger = transform_axes_to_digital_state([analog[5]], "trigger")
+
     except Exception as e:
         print("Unexpected Error " + str(e))
 

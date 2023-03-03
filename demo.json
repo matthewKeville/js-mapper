@@ -1,23 +1,58 @@
 {
-  "Type":"xkeys",
-  "DigitalKeys":11,
-  "DigitalBinds": 
-  [
-    {
-      "ButtonCombo": [4],
-      "Keystroke":"Down"
-    },
-    {
-      "ButtonCombo": [5],
-      "Keystroke":"Up"
-    },
-    {
-      "ButtonCombo": [6,7],
-      "Keystroke":"Super+f"
-    },
-    {
-      "ButtonCombo": [4,5,6,7],
-      "Keystroke":"Super+Shift+q"
-    }
-  ]
+  "Profile": "Demo",
+
+  "Digital": {
+    "Switches" : 11,
+    "Binds": [
+      {
+        "Name": "Go Fullscreen",
+        "Trigger": {
+          "Type": "in_state",
+          "Parameters" : {
+            "Combo": [4,5]
+          }
+        },
+        "Event": {
+          "Type": "xkeys",
+          "Parameters": {
+            "Keystroke": "Super+f"
+          }
+        }
+      },
+      {
+        "Name": "Print Hello",
+        "Trigger": {
+          "Type": "in_state",
+          "Parameters" : {
+            "Combo": [6,7]
+          }
+        },
+        "Event": {
+          "Type": "print",
+          "Parameters": {
+            "Value": "Hello!"
+          }
+        }
+      }
+    ]
+  },
+
+  "Analog": {
+    "Axes" : 6,
+    "Virtuals": [
+      {
+        "Name": "LeftJoystick",
+        "Transformation": {
+          "Type": "Joystick-Layered-Zones",
+          "Axes": [0, 1],
+          "Parameters": {
+            "Zones": 4,
+            "Layers":1
+          }
+        },
+        "Switches": 4,
+        "Binds": []
+      }
+    ]
+  }
 }
