@@ -1,0 +1,23 @@
+{
+  "Type":"xkeys",
+  "DigitalKeys":11,
+  "DigitalBinds": 
+  [
+    {
+      "ButtonCombo": [4],
+      "Keystroke":"Down"
+    },
+    {
+      "ButtonCombo": [5],
+      "Keystroke":"Up"
+    },
+    {
+      "ButtonCombo": [6,7],
+      "Keystroke":"Super+f"
+    },
+    {
+      "ButtonCombo": [4,5,6,7],
+      "Keystroke":"Super+Shift+q"
+    }
+  ]
+}
