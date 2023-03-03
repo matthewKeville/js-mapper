@@ -3,12 +3,19 @@ import re  # search
 import warnings
 import json
 import argparse
+import copy
 
 ALLOW_MISMATCHED_HANDLERS = False
 MAX_VALUE = 32000
 MIN_VALUE = 32000
 
 
+
+# -----------------------------------------------------------------------------
+# Transformation
+# -----------------------------------------------------------------------------
+
+# TBD
 
 # -----------------------------------------------------------------------------
 # Events
@@ -23,16 +30,139 @@ def named_print(Value):
     print(Value)
 
 
+"""
+Given an xdotool complaint keystroke string
+Run xdotool to simulate that key combination press
+"""
+
+def press_keys(Keystroke):
+    try:
+        command = f'xdotool key {Keystroke}'
+        execute(command)
+    except Exception as e:
+        print(f'There was an error running xdotool key {Keystroke}')
+        print(f'Exception {e}')
+
+
 # -----------------------------------------------------------------------------
 # Triggers
 # -----------------------------------------------------------------------------
 
+"""
+ Triggers take in a State timeline
+    [
+        {   Time: "xxx",
+            State: [x,y,z]
+        }, 
+        ...
+    ]
+"""
 
-def in_state(State, Combo):
+
+"""
+Currently in state
+"""
+
+def in_state(State_Matrix, Combo):
+    current_state = (State_Matrix[-1])["State"]
     for x in Combo:
-        if State[x] != 1:
+        if current_state[x] != 1:
             return False
     return True
+
+
+"""
+Entered into this state, but not previously here
+"""
+
+def enter_state(State_Matrix, Combo):
+    if (len(State_Matrix) < 2):
+        return False
+    previous_state = (State_Matrix[-2])["State"]
+    current_state = (State_Matrix[-1])["State"]
+
+    # Not previously in state
+    already_in_state = True
+    for x in Combo:
+        already_in_state = already_in_state and (previous_state[x] == 1)
+
+    if (already_in_state):
+        return False
+
+    # In State Now?
+    for x in Combo:
+        if current_state[x] != 1:
+            return False
+    # Wasn't in this state previously but am now!
+    return True
+
+
+
+"""
+previously in this state, but now no longer
+"""
+
+
+def exit_state(State_Matrix, Combo):
+    if (len(State_Matrix) < 2):
+        return False
+    previous_state = (State_Matrix[-2])["State"]
+    current_state = (State_Matrix[-1])["State"]
+
+    for x in Combo:
+        if (previous_state[x] != 1):
+            return False
+
+    for x in Combo:
+        if (current_state[x] != 1):
+            return True
+
+    return False
+
+"""
+    If the given combo is pressed *Multiplicity* times
+    in the Duration given in seconds, return true
+    Do not recount previous presses for new multipresses
+"""
+
+def multipress_state(State_Matrix, Combo, Multiplicity, Duration):
+    if (len(State_Matrix) < 2):
+        return False
+    # Duration is in seconds
+    # input time is 1 / 2^10 ratio
+    current_time = (State_Matrix[-1])["Time"]
+    input_time_min = current_time - (Duration * 1024)
+
+    # find earliest valid state 
+
+    earliest_valid_index = 0  # relative to the end
+    while (earliest_valid_index < len(State_Matrix)):
+        if (State_Matrix[-1*(earliest_valid_index+1)])["Time"] > input_time_min:
+            earliest_valid_index = earliest_valid_index+1
+        else:
+            break
+   
+    occurrences = 0
+    for state in State_Matrix[-earliest_valid_index:]:
+        valid = True
+        for c in Combo:
+            if (state["State"])[c] != 1:
+                valid = False
+        if (valid):
+            occurrences = occurrences + 1
+
+    # was the combo fired this state?
+    for c in Combo:
+        if ((State_Matrix[-1])["State"])[c] != 1:
+            return False
+
+    # fires once 
+    return (occurrences == Multiplicity)
+
+
+
+
+
 
 
 
@@ -79,6 +209,11 @@ def execute(command):
     subprocess.Popen(argArray)
 
 
+def dump_state_matrix(state_matrix):
+    for state in state_matrix:
+        print(f'{state["Time"]} : {state["State"]}')
+
+
 
 # -----------------------------------------------------------------------------
 # Evaluation
@@ -94,10 +229,10 @@ that handler
 """
 
 
-def process_digital_binds(digital, binds):
+def process_digital_binds(digital_state_matrix, binds):
     try:
         for bind in binds:
-            process_bind(digital, bind)
+            process_bind(digital_state_matrix, bind)
     except Exception as e:
         print("Error Processing Digital Binds " + str(e))
 
@@ -116,21 +251,32 @@ def process_digital_binds(digital, binds):
 """
 
 
-def process_bind(state, bind):
+def process_bind(state_matrix, bind):
 
-    # print(f' Evaluating Bind {bind["Name"]}')
+    if not bind["Trigger"]:
+        return
 
     kwargs = (bind["Trigger"])["Parameters"]
-    kwargs["State"] = state
-    fire = function_wrapper((bind["Trigger"])["Function"], kwargs)
+    kwargs["State_Matrix"] = state_matrix
+    try:
+        #print(f'Checking {bind["Name"]}')
+        fire = function_wrapper((bind["Trigger"])["Function"], kwargs)
+    except Exception as e1:
+        print(f'error checking trigger for bind {bind["Name"]}')
+        print(bind["Trigger"])
+        print(e1)
+
 
     # print(f' The Bind Trigger is {fire}')
 
     if (fire):
-        print(f' The bind named {bind["Name"]} has triggered')
-
-        kwargs = (bind["Event"])["Parameters"]
-        function_wrapper((bind["Event"])["Function"], kwargs)
+        print(f'The bind named {bind["Name"]} has triggered')
+        try:
+            kwargs = (bind["Event"])["Parameters"]
+            function_wrapper((bind["Event"])["Function"], kwargs)
+        except Exception as e2:
+            print(f'error firing event')
+            print(bind["Event"])
 
 """
 Given a list of axes and a rule
@@ -159,19 +305,6 @@ def transform_axes_to_digital_state(axes, rule):
         exit(10)
 
 
-"""
-Given an xdotool complaint keystroke string
-Run xdotool to simulate that key combination press
-"""
-
-
-def press_keys(Keystroke):
-    try:
-        command = f'xdotool key {Keystroke}'
-        execute(command)
-    except Exception as e:
-        print(f'There was an error running xdotool key {Keystroke}')
-        print(f'Exception {e}')
 
 
 """
@@ -206,17 +339,26 @@ def parse_bind(bind):
     if (trigger["Type"] == "in_state"):
         trigger_model["Function"] = in_state
         trigger_model["Parameters"] = trigger["Parameters"]
+    elif (trigger["Type"] == "enter_state"):
+        trigger_model["Function"] = enter_state
+        trigger_model["Parameters"] = trigger["Parameters"]
+    elif (trigger["Type"] == "exit_state"):
+        trigger_model["Function"] = exit_state
+        trigger_model["Parameters"] = trigger["Parameters"]
+    elif (trigger["Type"] == "multipress_state"):
+        trigger_model["Function"] = multipress_state
+        trigger_model["Parameters"] = trigger["Parameters"]
     else:
         pass
 
     # Event
     event = bind["Event"]
     event_model = {}
-    if (event["Type"] == "print"):
+    if (event["Type"] == "print_message"):
         event_model["Function"] = named_print
         event_model["Parameters"] = event["Parameters"]
         pass
-    elif (event["Type"] == "xkeys"):
+    elif (event["Type"] == "press_keys"):
         event_model["Function"] = press_keys
         event_model["Parameters"] = event["Parameters"]
 
@@ -238,18 +380,19 @@ def parse_config(json_string):
 
 
         # Process Analog
-        # a = config["Analog"]
-        # parse_analog(a)
-        analog_binds = []
+        a = config["Analog"]
+        virtual_binds = parse_analog(a)
 
-        return (digital_binds, analog_binds)
+        return (digital_binds, virtual_binds)
 
     except Exception as e:
         print("Error Parsing Config")
         print(f"Error {e}")
         exit(5)
 
-
+"""
+    Return a list of binds
+"""
 def parse_digital(d):
     digital_binds = []
     for bind in d["Binds"]:
@@ -257,8 +400,15 @@ def parse_digital(d):
     return digital_binds
 
 
+"""
+    Return a list of virtual binds
+    virtual bind is a (transformation, and bind array)
+"""
 def parse_analog(a):
-    pass
+    virtual_binds = []
+    # for virtual in a["Virtuals"]:
+    #    virtual_model = {"Name": virtual["Name"]}
+    return virtual_binds
 
 
 
@@ -295,7 +445,7 @@ else:
 device_path = args.device
 digital_binds = []
 
-(digital_binds, analog_binds) = parse_config(config_string)
+(digital_binds, virtual_binds) = parse_config(config_string)
 print(digital_binds)
 
 
@@ -304,16 +454,12 @@ print(digital_binds)
 # -----------------------------------------------------------------------------
 
 
-#digital_binds.append({
-#        "ButtonCombo": short_state_to_long_state([0], 11),
-#        "Handle": lambda n: print(f'Debug Handle {n} triggered'),
-#        "Args": [1]
-#})
 
+"""
 digital_binds.append({
         "Name": "Debug0",
         "Trigger": {
-            "Function": lambda State, Key: (State[Key] == 1), # A boolean function that evalutates if state triggers bind,
+            "Function": lambda States, Key: ((States[-1])[Key] == 1), # A boolean function that evalutates if state triggers bind,
                                                                        # When triggers are evaluated state is injected into the kwargs
             "Parameters": {"Key": 0}
         },
@@ -323,6 +469,7 @@ digital_binds.append({
             "Parameters": { "Debug": 0}
         }
 })
+"""
 
 
 
@@ -375,7 +522,9 @@ TestLines = len(Buttons)+len(Axes)
 # -----------------------------------------------------------------------------
 
 digital = [0 for x in range(len(Buttons))]
+digital_state_matrix = []
 analog = [0 for x in range(len(Axes))]
+analog_state_matrix = []
 running = True
 
 # -----------------------------------------------------------------------------
@@ -433,19 +582,21 @@ while running:
             Time = TimeString.strip().split(' ')[1]
             Number = NumberString.strip().split(' ')[1]
             Value = ValueString.strip().split(' ')[1]
+
             digital[int(Number)] = int(Value)
+            digital_state = {"Time": int(Time), "State": digital}
 
+            digital_state_matrix.append(copy.deepcopy(digital_state)) 
 
-            process_digital_binds(digital, digital_binds)
+            process_digital_binds(digital_state_matrix, digital_binds)
+           
+            #print("--------------------------------")
+            #dump_state_matrix(digital_state_matrix)
+
         elif (Type == "2"):  # Analog Press
-
-            analog[int(Number)] = int(Value)
-
-
-        # print(f'digital {digital}')
-        # print(f'analog  {analog}')
-        # left_trigger = transform_axes_to_digital_state([analog[2]], "trigger")
-        # right_trigger = transform_axes_to_digital_state([analog[5]], "trigger")
+            pass
+            # analog[int(Number)] = int(Value)
+            # analog_state_matrix.append(list(analog)) 
 
     except Exception as e:
         print("Unexpected Error " + str(e))

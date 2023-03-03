@@ -13,24 +13,71 @@
           }
         },
         "Event": {
-          "Type": "xkeys",
+          "Type": "press_keys",
           "Parameters": {
             "Keystroke": "Super+f"
           }
         }
       },
       {
-        "Name": "Print Hello",
+        "Name": "In State Debug",
         "Trigger": {
           "Type": "in_state",
+          "Parameters" : {
+            "Combo": [0]
+          }
+        },
+        "Event": {
+          "Type": "print_message",
+          "Parameters": {
+            "Value": "in state event"
+          }
+        }
+      },
+      {
+        "Name": "Enter State Debug",
+        "Trigger": {
+          "Type": "enter_state",
           "Parameters" : {
             "Combo": [6,7]
           }
         },
         "Event": {
-          "Type": "print",
+          "Type": "print_message",
           "Parameters": {
-            "Value": "Hello!"
+            "Value": "enter state event"
+          }
+        }
+      },
+      {
+        "Name": "Exit State Debug",
+        "Trigger": {
+          "Type": "exit_state",
+          "Parameters" : {
+            "Combo": [6,7]
+          }
+        },
+        "Event": {
+          "Type": "print_message",
+          "Parameters": {
+            "Value": "exit state event"
+          }
+        }
+      },
+      {
+        "Name": "Multi Press State Debug",
+        "Trigger": {
+          "Type": "multipress_state",
+          "Parameters" : {
+            "Combo": [1],
+            "Multiplicity": 3,
+            "Duration": 1
+          }
+        },
+        "Event": {
+          "Type": "print_message",
+          "Parameters": {
+            "Value": "multipress state event"
           }
         }
       }
@@ -40,19 +87,6 @@
   "Analog": {
     "Axes" : 6,
     "Virtuals": [
-      {
-        "Name": "LeftJoystick",
-        "Transformation": {
-          "Type": "Joystick-Layered-Zones",
-          "Axes": [0, 1],
-          "Parameters": {
-            "Zones": 4,
-            "Layers":1
-          }
-        },
-        "Switches": 4,
-        "Binds": []
-      }
     ]
   }
 }
