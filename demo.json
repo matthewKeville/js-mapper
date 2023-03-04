@@ -1,6 +1,5 @@
 {
   "Profile": "Demo",
-
   "Digital": {
     "Switches" : 11,
     "Binds": [
@@ -87,7 +86,39 @@
 
   "Analog": {
     "Axes" : 6,
-    "Virtuals": [
+    "Binds": [
+      {
+        "Name": "threshold enter debug",
+        "Trigger": {
+          "Type": "threshold_enter_state",
+          "Parameters" : {
+            "Axes": [2],
+            "Thresholds": [75]
+          }
+        },
+        "Event": {
+          "Type": "print_message",
+          "Parameters": {
+            "Value": "threshold state event"
+          }
+        }
+       },
+      {
+        "Name": "dual trigger threshold enter debug",
+        "Trigger": {
+          "Type": "threshold_enter_state",
+          "Parameters" : {
+            "Axes": [2,5],
+            "Thresholds": [75,75]
+          }
+        },
+        "Event": {
+          "Type": "print_message",
+          "Parameters": {
+            "Value": "threshold state event"
+          }
+        }
+       }
     ]
   }
 }

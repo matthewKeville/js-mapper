@@ -4,12 +4,66 @@ import warnings
 import json
 import argparse
 import copy
+import time
 
 ALLOW_MISMATCHED_HANDLERS = False
-MAX_VALUE = 32000
-MIN_VALUE = 32000
+ANALOG_MAX = 32000
+ANALOG_MIN = -32000
+ANALOG_THROTTLE_DELAY = 100  # in ms
 
 
+# -----------------------------------------------------------------------------
+# Utilities
+# -----------------------------------------------------------------------------
+
+
+"""
+Execute the function func with the keyword args (kwards)
+From the dictionary
+"""
+
+
+def percent_to_analog(percent):
+    # 100 % -> analog max
+    # -100% -> analog min
+    return ((percent/100)*ANALOG_MAX)
+
+
+def function_wrapper(func, kwargs):
+    if kwargs:
+        return func(**kwargs)
+    else:
+        print("This function wrapper makes no sense")
+        print("Quiting ... ")
+
+
+"""
+Return all non overlapping strings between two chars 
+"""
+
+
+def captured_strings(leftChar, rightChar, string):
+    escLeft = re.escape(leftChar)
+    escRight = re.escape(rightChar)
+    regex = "(?<="+escLeft+").+?(?="+escRight+")"
+    return re.findall(regex, string)
+
+
+""" 
+Execute a shell command
+ - This is broken for pipes
+ - This is broken for escaped spaces
+"""
+
+
+def execute(command):
+    argArray = command.split(" ")
+    subprocess.Popen(argArray)
+
+
+def dump_state_matrix(state_matrix):
+    for state in state_matrix:
+        print(f'{state["Time"]} : {state["State"]}')
 
 # -----------------------------------------------------------------------------
 # Transformation
@@ -45,7 +99,7 @@ def press_keys(Keystroke):
 
 
 # -----------------------------------------------------------------------------
-# Triggers
+# Triggers (Digital)
 # -----------------------------------------------------------------------------
 
 """
@@ -190,56 +244,47 @@ def sequence_state(State_Matrix, Sequence):
 
 
 
-
-
-
-
 # -----------------------------------------------------------------------------
-# Utilities
+# Triggers (Analog)
 # -----------------------------------------------------------------------------
 
 
 """
-Execute the function func with the keyword args (kwards)
-From the dictionary
+    A list of analog axis are passed accompandied
+    by a list of percentage thresholds that must be
+    crossed at the same time to fire an event.
+    Threshold is an int expressing the percentage of 
+    activation of that axis. 100 -> Positive Max (32k)
+    -100 -> Negative Max (-32k)
 """
 
+def threshold_enter_state(State_Matrix, Axes, Thresholds):
 
-def function_wrapper(func, kwargs):
-    if kwargs:
-        return func(**kwargs)
-    else:
-        print("This function wrapper makes no sense")
-        print("Quiting ... ")
+    if (len(State_Matrix) < 2):
+        return False
 
+    previous_state = (State_Matrix[-2])["State"]
+    current_state = (State_Matrix[-1])["State"]
 
-"""
-Return all non overlapping strings between two chars 
-"""
+    # Check if not previously in state
+    i = 0
+    previously_fired = True
+    for Axis in Axes:
+        if (previous_state[Axis] < percent_to_analog(Thresholds[i])):
+            previously_fired = False
+        i = i + 1
 
+    if (previously_fired):
+        return False
 
-def captured_strings(leftChar, rightChar, string):
-    escLeft = re.escape(leftChar)
-    escRight = re.escape(rightChar)
-    regex = "(?<="+escLeft+").+?(?="+escRight+")"
-    return re.findall(regex, string)
-
-
-""" 
-Execute a shell command
- - This is broken for pipes
- - This is broken for escaped spaces
-"""
-
-
-def execute(command):
-    argArray = command.split(" ")
-    subprocess.Popen(argArray)
+    i = 0
+    for Axis in Axes:
+        if (current_state[Axis] < percent_to_analog(Thresholds[i])):
+            return False
+        i = i + 1
+    return True
 
 
-def dump_state_matrix(state_matrix):
-    for state in state_matrix:
-        print(f'{state["Time"]} : {state["State"]}')
 
 
 
@@ -257,12 +302,12 @@ that handler
 """
 
 
-def process_digital_binds(digital_state_matrix, binds):
+def process_binds(state_matrix, binds):
     try:
         for bind in binds:
-            process_bind(digital_state_matrix, bind)
+            process_bind(state_matrix, bind)
     except Exception as e:
-        print("Error Processing Digital Binds " + str(e))
+        print("Error Processing Binds " + str(e))
 
 """
 "Name": "Debug0",
@@ -357,33 +402,47 @@ def short_state_to_long_state(short, size):
 # -----------------------------------------------------------------------------
 
 
-def parse_bind(bind):
+def parse_bind(Bind, Type):
     # Name
-    model = {"Name": bind["Name"]}
+    model = {"Name": Bind["Name"]}
 
-    # Trigger
-    trigger = bind["Trigger"]
-    trigger_model = {}
-    if (trigger["Type"] == "in_state"):
-        trigger_model["Function"] = in_state
-        trigger_model["Parameters"] = trigger["Parameters"]
-    elif (trigger["Type"] == "enter_state"):
-        trigger_model["Function"] = enter_state
-        trigger_model["Parameters"] = trigger["Parameters"]
-    elif (trigger["Type"] == "exit_state"):
-        trigger_model["Function"] = exit_state
-        trigger_model["Parameters"] = trigger["Parameters"]
-    elif (trigger["Type"] == "multipress_state"):
-        trigger_model["Function"] = multipress_state
-        trigger_model["Parameters"] = trigger["Parameters"]
-    elif (trigger["Type"] == "hold_state"):
-        trigger_model["Function"] = hold_state
-        trigger_model["Parameters"] = trigger["Parameters"]
+    if (Type == "digital"):
+
+        # Trigger
+        trigger = Bind["Trigger"]
+        trigger_model = {}
+        if (trigger["Type"] == "in_state"):
+            trigger_model["Function"] = in_state
+            trigger_model["Parameters"] = trigger["Parameters"]
+        elif (trigger["Type"] == "enter_state"):
+            trigger_model["Function"] = enter_state
+            trigger_model["Parameters"] = trigger["Parameters"]
+        elif (trigger["Type"] == "exit_state"):
+            trigger_model["Function"] = exit_state
+            trigger_model["Parameters"] = trigger["Parameters"]
+        elif (trigger["Type"] == "multipress_state"):
+            trigger_model["Function"] = multipress_state
+            trigger_model["Parameters"] = trigger["Parameters"]
+        elif (trigger["Type"] == "hold_state"):
+            trigger_model["Function"] = hold_state
+            trigger_model["Parameters"] = trigger["Parameters"]
+        else:
+            pass
+
+    elif (Type == "analog"):
+        trigger = Bind["Trigger"]
+        trigger_model = {}
+        if (trigger["Type"] == "threshold_enter_state"):
+            trigger_model["Function"] = threshold_enter_state
+            trigger_model["Parameters"] = trigger["Parameters"]
+        else:
+            pass
     else:
-        pass
+        print(f'Unkown bind type {Type}')
+
 
     # Event
-    event = bind["Event"]
+    event = Bind["Event"]
     event_model = {}
     if (event["Type"] == "print_message"):
         event_model["Function"] = named_print
@@ -412,9 +471,9 @@ def parse_config(json_string):
 
         # Process Analog
         a = config["Analog"]
-        virtual_binds = parse_analog(a)
+        analog_binds = parse_analog(a)
 
-        return (digital_binds, virtual_binds)
+        return (digital_binds, analog_binds)
 
     except Exception as e:
         print("Error Parsing Config")
@@ -427,7 +486,7 @@ def parse_config(json_string):
 def parse_digital(d):
     digital_binds = []
     for bind in d["Binds"]:
-        digital_binds.append(parse_bind(bind))
+        digital_binds.append(parse_bind(Bind=bind, Type="digital"))
     return digital_binds
 
 
@@ -436,10 +495,10 @@ def parse_digital(d):
     virtual bind is a (transformation, and bind array)
 """
 def parse_analog(a):
-    virtual_binds = []
-    # for virtual in a["Virtuals"]:
-    #    virtual_model = {"Name": virtual["Name"]}
-    return virtual_binds
+    analog_binds = []
+    for bind in a["Binds"]:
+        analog_binds.append(parse_bind(Bind=bind, Type="analog"))
+    return analog_binds
 
 
 
@@ -476,7 +535,7 @@ else:
 device_path = args.device
 digital_binds = []
 
-(digital_binds, virtual_binds) = parse_config(config_string)
+(digital_binds, analog_binds) = parse_config(config_string)
 print(digital_binds)
 
 
@@ -619,15 +678,18 @@ while running:
 
             digital_state_matrix.append(copy.deepcopy(digital_state)) 
 
-            process_digital_binds(digital_state_matrix, digital_binds)
+            process_binds(digital_state_matrix, digital_binds)
            
             #print("--------------------------------")
             #dump_state_matrix(digital_state_matrix)
 
         elif (Type == "2"):  # Analog Press
             pass
-            # analog[int(Number)] = int(Value)
-            # analog_state_matrix.append(list(analog)) 
+            analog[int(Number)] = int(Value)
+            analog_state = {"Time": int(Time), "State": analog}
+            analog_state_matrix.append(copy.deepcopy(analog_state)) 
+
+            process_binds(analog_state_matrix, analog_binds)
 
     except Exception as e:
         print("Unexpected Error " + str(e))
