@@ -160,6 +160,34 @@ def multipress_state(State_Matrix, Combo, Multiplicity, Duration):
     return (occurrences == Multiplicity)
 
 
+"""
+    If the given combo is held for *Duration* seconds
+    when the combo is released a true event is fired.
+"""
+
+
+def hold_state(State_Matrix, Combo, Duration):
+    if (len(State_Matrix) < 2):
+        return False
+
+    previous_state = (State_Matrix[-2])['State']
+    for c in Combo:
+        if (previous_state[c] != 1):
+            return False
+    
+    previous_time = (State_Matrix[-2])['Time']
+    current_time = (State_Matrix[-1])['Time']
+
+    return (current_time - previous_time > (Duration * 1024))
+   
+"""
+    If the following input sequence is matched exactly
+    trigger
+"""
+
+def sequence_state(State_Matrix, Sequence):
+    pass
+
 
 
 
@@ -347,6 +375,9 @@ def parse_bind(bind):
         trigger_model["Parameters"] = trigger["Parameters"]
     elif (trigger["Type"] == "multipress_state"):
         trigger_model["Function"] = multipress_state
+        trigger_model["Parameters"] = trigger["Parameters"]
+    elif (trigger["Type"] == "hold_state"):
+        trigger_model["Function"] = hold_state
         trigger_model["Parameters"] = trigger["Parameters"]
     else:
         pass

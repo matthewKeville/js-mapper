@@ -5,21 +5,6 @@
     "Switches" : 11,
     "Binds": [
       {
-        "Name": "Go Fullscreen",
-        "Trigger": {
-          "Type": "in_state",
-          "Parameters" : {
-            "Combo": [4,5]
-          }
-        },
-        "Event": {
-          "Type": "press_keys",
-          "Parameters": {
-            "Keystroke": "Super+f"
-          }
-        }
-      },
-      {
         "Name": "In State Debug",
         "Trigger": {
           "Type": "in_state",
@@ -78,6 +63,22 @@
           "Type": "print_message",
           "Parameters": {
             "Value": "multipress state event"
+          }
+        }
+      },
+      {
+        "Name": "Hold State State Debug",
+        "Trigger": {
+          "Type": "hold_state",
+          "Parameters" : {
+            "Combo": [1],
+            "Duration": 5
+          }
+        },
+        "Event": {
+          "Type": "print_message",
+          "Parameters": {
+            "Value": "hold state event"
           }
         }
       }
