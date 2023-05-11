@@ -411,6 +411,7 @@ def parse_bind(Bind, Type):
         # Trigger
         trigger = Bind["Trigger"]
         trigger_model = {}
+        print(f'The trigger is {trigger}')
         if (trigger["Type"] == "in_state"):
             trigger_model["Function"] = in_state
             trigger_model["Parameters"] = trigger["Parameters"]
@@ -461,6 +462,7 @@ def parse_bind(Bind, Type):
     Return a list of lists virtual binds
 """
 def parse_config(json_string):
+    print("In parse config")
     try:
         config = json.loads(json_string)
 
@@ -485,8 +487,12 @@ def parse_config(json_string):
 """
 def parse_digital(d):
     digital_binds = []
+    print("in parse digital")
+    print(d["Binds"])
     for bind in d["Binds"]:
+        print("in bind")
         digital_binds.append(parse_bind(Bind=bind, Type="digital"))
+    print("exit parse digital")
     return digital_binds
 
 
@@ -536,7 +542,10 @@ device_path = args.device
 digital_binds = []
 
 (digital_binds, analog_binds) = parse_config(config_string)
+print("parsed config")
+print("wtf")
 print(digital_binds)
+print(analog_binds)
 
 
 # -----------------------------------------------------------------------------
@@ -643,58 +652,61 @@ for x in range(TestLines):
 # Process Normal Execution
 # -----------------------------------------------------------------------------
 
-while running:
-    rawline = process.stdout.readline()
-    exit_code = process.poll()
-    if exit_code is not None:
-        if exit_code == 0:
-            print("jstest has terminated gracefully")
+def run():
+
+    while running:
+        rawline = process.stdout.readline()
+        exit_code = process.poll()
+        if exit_code is not None:
+            if exit_code == 0:
+                print("jstest has terminated gracefully")
+                break
+            print(f'jstest exited with error code {exit_code}')
+            try:
+                rawerrorline = process.stderr.read()
+                print(f'This error occurred {errorline}')
+            except Exception as e:
+                pass
             break
-        print(f'jstest exited with error code {exit_code}')
+        line = rawline.rstrip().decode('utf-8')
         try:
-            rawerrorline = process.stderr.read()
-            print(f'This error occurred {errorline}')
-        except Exception as e:
-            pass
-        break
-    line = rawline.rstrip().decode('utf-8')
-    try:
 
-        Strings = [EventString, TimeString, NumberString, ValueString] = line.split(',')
+            Strings = [EventString, TimeString, NumberString, ValueString] = line.split(',')
 
-        Type = EventString[-1]
-        Time = TimeString.strip().split(' ')[1]
-        Number = NumberString.strip().split(' ')[1]
-        Value = ValueString.strip().split(' ')[1]
-
-        if (Type == "1"):  # Digital Press
-
+            Type = EventString[-1]
             Time = TimeString.strip().split(' ')[1]
             Number = NumberString.strip().split(' ')[1]
             Value = ValueString.strip().split(' ')[1]
 
-            digital[int(Number)] = int(Value)
-            digital_state = {"Time": int(Time), "State": digital}
+            if (Type == "1"):  # Digital Press
 
-            digital_state_matrix.append(copy.deepcopy(digital_state)) 
+                Time = TimeString.strip().split(' ')[1]
+                Number = NumberString.strip().split(' ')[1]
+                Value = ValueString.strip().split(' ')[1]
 
-            process_binds(digital_state_matrix, digital_binds)
-           
-            #print("--------------------------------")
-            #dump_state_matrix(digital_state_matrix)
+                digital[int(Number)] = int(Value)
+                digital_state = {"Time": int(Time), "State": digital}
 
-        elif (Type == "2"):  # Analog Press
-            pass
-            analog[int(Number)] = int(Value)
-            analog_state = {"Time": int(Time), "State": analog}
-            analog_state_matrix.append(copy.deepcopy(analog_state)) 
+                digital_state_matrix.append(copy.deepcopy(digital_state)) 
 
-            process_binds(analog_state_matrix, analog_binds)
+                process_binds(digital_state_matrix, digital_binds)
+               
+                #print("--------------------------------")
+                #dump_state_matrix(digital_state_matrix)
 
-    except Exception as e:
-        print("Unexpected Error " + str(e))
+            elif (Type == "2"):  # Analog Press
+                pass
+                analog[int(Number)] = int(Value)
+                analog_state = {"Time": int(Time), "State": analog}
+                analog_state_matrix.append(copy.deepcopy(analog_state)) 
 
-process.kill()
+                process_binds(analog_state_matrix, analog_binds)
+
+        except Exception as e:
+            print("Unexpected Error " + str(e))
+
+    process.kill()
 
 
+run()
 
